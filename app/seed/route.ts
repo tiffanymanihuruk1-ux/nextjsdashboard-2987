@@ -1,8 +1,8 @@
 import bcrypt from 'bcrypt';
-import postgres from 'postgres';
 import { invoices, customers, revenue, users } from '../lib/placeholder-data';
+import { sql } from '../lib/db';
 
-const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
+export const dynamic = 'force-dynamic';
 
 async function seedUsers(sql : any) {
   await sql`CREATE EXTENSION IF NOT EXISTS "uuid-ossp"`;
@@ -101,17 +101,40 @@ async function seedRevenue(sql : any) {
   return insertedRevenue;
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return 'Unknown error';
+}
+
 export async function GET() {
   try {
-    const result = await sql.begin(async (sql) => [
+    await sql.begin(async (sql) => [
       await seedUsers(sql),
       await seedCustomers(sql),
       await seedInvoices(sql),
       await seedRevenue(sql),
     ]);
 
-    return Response.json({ message: 'Database seeded successfully' });
+    return Response.json(
+      { message: 'Database seeded successfully' },
+      {
+        headers: {
+          'Cache-Control': 'no-store',
+        },
+      },
+    );
   } catch (error) {
-    return Response.json({ error }, { status: 500 });
+    console.error('Seed route error:', error);
+
+    return Response.json(
+      {
+        error: 'Failed to seed the Neon database.',
+        details: getErrorMessage(error),
+      },
+      { status: 500 },
+    );
   }
 }
